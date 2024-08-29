@@ -22,4 +22,9 @@ document.addEventListener('DOMContentLoaded', () => {
       alert('API key saved successfully!');
     });
   });
+
+  const viewLogLink = document.getElementById('viewLog');
+  viewLogLink.addEventListener('click', () => {
+    chrome.tabs.create({url: chrome.runtime.getURL('log.html')});
+  });
 });

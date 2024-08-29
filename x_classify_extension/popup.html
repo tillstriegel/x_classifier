@@ -1,18 +1,22 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>X Classifier</title>
-    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            width: 300px;
+            padding: 10px;
+        }
+    </style>
 </head>
 <body>
     <h1>X Classifier</h1>
-    <p>Classifying tweets on X.com</p>
-    <label for="apiKey">Groq API Key:</label>
-    <input type="password" id="apiKey" placeholder="Enter your Groq API key">
-    <button id="saveApiKey">Save API Key</button>
     <button id="toggleClassification">Toggle Classification</button>
+    <br><br>
+    <input type="text" id="apiKey" placeholder="Enter Groq API Key">
+    <button id="saveApiKey">Save API Key</button>
+    <br><br>
+    <a href="#" id="viewLog">View Classification Log</a>
     <script src="popup.js"></script>
 </body>
 </html>

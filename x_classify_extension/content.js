@@ -1,4 +1,5 @@
 let isEnabled = true;
+let classificationLog = [];
 
 const classColors = {
   'News': '#1DA1F2',    // Twitter Blue
@@ -57,6 +58,32 @@ function classifyTweets() {
       
       tweet.appendChild(classificationElement);
       tweet.classList.add('classified');
+
+      // Add to classification log if not already logged
+      const isAlreadyLogged = classificationLog.some(entry => entry.id === tweetId);
+      if (!isAlreadyLogged) {
+        classificationLog.push({
+          id: tweetId,
+          text: tweetText,
+          classification: classification,
+          timestamp: new Date().toISOString()
+        });
+        chrome.storage.local.set({ classificationLog: classificationLog });
+      }
+
+      // Blur 'Spam' tweets
+      if (classification === 'Spam') {
+        tweet.style.filter = 'blur(5px)';
+        tweet.style.transition = 'filter 0.3s ease';
+        
+        // Add hover effect to unblur
+        tweet.addEventListener('mouseenter', () => {
+          tweet.style.filter = 'blur(0)';
+        });
+        tweet.addEventListener('mouseleave', () => {
+          tweet.style.filter = 'blur(5px)';
+        });
+      }
     } catch (error) {
       console.error('Failed to classify tweet:', error);
     } finally {
@@ -89,6 +116,13 @@ const debouncedClassifyTweets = debounce(classifyTweets, 500);
 const observer = new MutationObserver(debouncedClassifyTweets);
 observer.observe(document.body, { childList: true, subtree: true });
 
+// Load existing classification log
+chrome.storage.local.get('classificationLog', (result) => {
+  if (result.classificationLog) {
+    classificationLog = result.classificationLog;
+  }
+});
+
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "toggleClassification") {
@@ -98,7 +132,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     } else {
       // Remove all classification badges when disabled
       document.querySelectorAll('.tweet-classification').forEach(el => el.remove());
-      document.querySelectorAll('.classified').forEach(el => el.classList.remove('classified'));
+      document.querySelectorAll('.classified').forEach(el => {
+        el.classList.remove('classified');
+        el.style.filter = 'none';
+        el.style.transition = 'none';
+      });
       document.querySelectorAll('.classifying').forEach(el => el.classList.remove('classifying'));
     }
   }

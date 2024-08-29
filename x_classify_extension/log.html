@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>X Classifier Log</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        h1 {
+            color: #1DA1F2;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+        }
+        th, td {
+            padding: 10px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        th {
+            background-color: #1DA1F2;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h1>X Classifier Log</h1>
+    <table id="logTable">
+        <thead>
+            <tr>
+                <th>Timestamp</th>
+                <th>Tweet Text</th>
+                <th>Classification</th>
+            </tr>
+        </thead>
+        <tbody id="logBody"></tbody>
+    </table>
+    <script src="log.js"></script>
+</body>
+</html>
