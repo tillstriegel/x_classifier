@@ -16,13 +16,27 @@ function classifyTweets() {
     const tweetTextElement = tweet.querySelector('div[data-testid="tweetText"]');
     if (!tweetTextElement) return;
 
+    // Get tweet ID from the link in the tweet's timestamp
+    const timestampLink = tweet.querySelector('a[href*="/status/"]');
+    const tweetId = timestampLink ? timestampLink.href.split('/status/')[1] : null;
+    if (!tweetId) return;
+
     // Mark the tweet as being classified to prevent duplicate processing
     tweet.classList.add('classifying');
 
     const tweetText = tweetTextElement.textContent;
     try {
-      const { classification } = await chrome.runtime.sendMessage({ action: "classifyTweet", tweetText });
+      // Check if classification already exists
+      const existingClassification = await chrome.runtime.sendMessage({ action: "getClassification", tweetId });
       
+      let classification;
+      if (existingClassification) {
+        classification = existingClassification;
+      } else {
+        // If not, classify and save
+        classification = await chrome.runtime.sendMessage({ action: "classifyTweet", tweetText, tweetId });
+      }
+
       const classificationElement = document.createElement('div');
       classificationElement.textContent = classification;
       classificationElement.style.position = 'absolute';

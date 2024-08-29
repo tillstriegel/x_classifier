@@ -7,14 +7,19 @@ chrome.runtime.onInstalled.addListener(() => {
 // Add message listener for communication with content script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "classifyTweet") {
-    classifyTweetWithGroq(request.tweetText)
-      .then(classification => sendResponse({ classification }))
+    classifyTweetWithGroq(request.tweetText, request.tweetId)
+      .then(classification => sendResponse(classification))
       .catch(error => sendResponse({ error: error.message }));
-    return true; // Indicates we will send a response asynchronously
+    return true;
+  } else if (request.action === "getClassification") {
+    getStoredClassification(request.tweetId)
+      .then(classification => sendResponse(classification))
+      .catch(error => sendResponse({ error: error.message }));
+    return true;
   }
 });
 
-async function classifyTweetWithGroq(tweetText) {
+async function classifyTweetWithGroq(tweetText, tweetId) {
   const apiKey = await chrome.storage.sync.get('apiKey').then(result => result.apiKey);
   if (!apiKey) {
     throw new Error('Groq API key not set');
@@ -32,6 +37,7 @@ async function classifyTweetWithGroq(tweetText) {
         { role: 'system', content: 'You are a tweet classifier. Classify the given tweet into one of these categories: News, Opinion, Humor, Spam, or Other. Respond with only the category name.' },
         { role: 'user', content: tweetText }
       ],
+      temperature: 0,
     }),
   });
 
@@ -40,5 +46,34 @@ async function classifyTweetWithGroq(tweetText) {
   }
 
   const data = await response.json();
-  return data.choices[0].message.content.trim();
+  const classification = data.choices[0].message.content.trim();
+  
+  // Store the classification
+  await storeClassification(tweetId, classification);
+  
+  return classification;
+}
+
+async function storeClassification(tweetId, classification) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set({ [tweetId]: classification }, () => {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+async function getStoredClassification(tweetId) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(tweetId, (result) => {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);
+      } else {
+        resolve(result[tweetId] || null);
+      }
+    });
+  });
 }

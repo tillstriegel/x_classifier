@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "X Classifier",
-  "version": "1.0",
+  "version": "1.1",
   "description": "Classifies tweets on X.com using LLMs provided by Groq",
   "permissions": ["activeTab", "storage"],
   "host_permissions": ["https://x.com/*", "https://twitter.com/*", "https://api.groq.com/*"],
