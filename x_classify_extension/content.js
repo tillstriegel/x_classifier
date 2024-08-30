@@ -9,7 +9,7 @@ const classColors = {
   'Other': '#808080'    // Gray
 };
 
-function classifyTweets() {
+async function classifyTweets() {
   if (!isEnabled) return;
 
   const tweets = document.querySelectorAll('article[data-testid="tweet"]:not(.classified):not(.classifying)');
@@ -59,13 +59,41 @@ function classifyTweets() {
       tweet.appendChild(classificationElement);
       tweet.classList.add('classified');
 
-      // Add to classification log if not already logged
+      // Extract author information
+      const authorElement = tweet.querySelector('div[data-testid="User-Name"] span');
+      const author = authorElement ? authorElement.textContent.trim() : 'Unknown';
+
+      // Extract engagement numbers
+      const engagementStats = tweet.querySelectorAll('button[type="button"], a');
+      let replies = '0', retweets = '0', likes = '0', views = '0';
+
+      engagementStats.forEach(stat => {
+        const text = stat.textContent.trim();
+        if (stat.getAttribute('data-testid')?.includes('reply')) {
+          replies = text;
+        } else if (stat.getAttribute('data-testid')?.includes('retweet')) {
+          retweets = text;
+        } else if (stat.getAttribute('data-testid')?.includes('like')) {
+          likes = text;
+        } else if (stat.getAttribute('aria-label')?.includes('View')) {
+          views = text;
+        }
+      });
+
+      // Add to classification log
       const isAlreadyLogged = classificationLog.some(entry => entry.id === tweetId);
       if (!isAlreadyLogged) {
         classificationLog.push({
           id: tweetId,
+          author: author,
           text: tweetText,
           classification: classification,
+          engagement: {
+            replies: replies,
+            retweets: retweets,
+            likes: likes,
+            views: views
+          },
           timestamp: new Date().toISOString()
         });
         chrome.storage.local.set({ classificationLog: classificationLog });
