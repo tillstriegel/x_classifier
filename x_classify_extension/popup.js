@@ -27,4 +27,14 @@ document.addEventListener('DOMContentLoaded', () => {
   viewLogLink.addEventListener('click', () => {
     chrome.tabs.create({url: chrome.runtime.getURL('log.html')});
   });
+
+  const clearLogButton = document.getElementById('clearLog');
+  clearLogButton.addEventListener('click', () => {
+    chrome.storage.local.remove('classificationLog', () => {
+      alert('Classification log cleared!');
+      chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+        chrome.tabs.sendMessage(tabs[0].id, {action: "clearLog"});
+      });
+    });
+  });
 });

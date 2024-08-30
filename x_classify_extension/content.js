@@ -1,5 +1,6 @@
 let isEnabled = true;
 let classificationLog = [];
+let userTweetCounts = {};
 
 const classColors = {
   'News': '#1DA1F2',    // Twitter Blue
@@ -13,14 +14,14 @@ async function classifyTweets() {
   if (!isEnabled) return;
 
   const tweets = document.querySelectorAll('article[data-testid="tweet"]:not(.classified):not(.classifying)');
-  tweets.forEach(async (tweet) => {
+  for (const tweet of tweets) {
     const tweetTextElement = tweet.querySelector('div[data-testid="tweetText"]');
-    if (!tweetTextElement) return;
+    if (!tweetTextElement) continue;
 
     // Get tweet ID from the link in the tweet's timestamp
     const timestampLink = tweet.querySelector('a[href*="/status/"]');
     const tweetId = timestampLink ? timestampLink.href.split('/status/')[1] : null;
-    if (!tweetId) return;
+    if (!tweetId) continue;
 
     // Mark the tweet as being classified to prevent duplicate processing
     tweet.classList.add('classifying');
@@ -28,14 +29,19 @@ async function classifyTweets() {
     const tweetText = tweetTextElement.textContent;
     try {
       // Check if classification already exists
-      const existingClassification = await chrome.runtime.sendMessage({ action: "getClassification", tweetId });
-      
       let classification;
-      if (existingClassification) {
-        classification = existingClassification;
-      } else {
-        // If not, classify and save
-        classification = await chrome.runtime.sendMessage({ action: "classifyTweet", tweetText, tweetId });
+      try {
+        classification = await chrome.runtime.sendMessage({ action: "getClassification", tweetId });
+        if (!classification) {
+          classification = await chrome.runtime.sendMessage({ action: "classifyTweet", tweetText, tweetId });
+        }
+      } catch (error) {
+        if (error.message.includes("Extension context invalidated")) {
+          console.log("Extension context invalidated. Reloading page...");
+          location.reload();
+          return;
+        }
+        throw error;
       }
 
       const classificationElement = document.createElement('div');
@@ -60,8 +66,8 @@ async function classifyTweets() {
       tweet.classList.add('classified');
 
       // Extract author information
-      const authorElement = tweet.querySelector('div[data-testid="User-Name"] span');
-      const author = authorElement ? authorElement.textContent.trim() : 'Unknown';
+      const authorElement = tweet.querySelector('div[data-testid="User-Name"] a');
+      const author = authorElement ? authorElement.getAttribute('href').slice(1) : 'Unknown';
 
       // Extract engagement numbers
       const engagementStats = tweet.querySelectorAll('button[type="button"], a');
@@ -80,9 +86,17 @@ async function classifyTweets() {
         }
       });
 
-      // Add to classification log
+      // Check if the tweet is already logged
       const isAlreadyLogged = classificationLog.some(entry => entry.id === tweetId);
+
       if (!isAlreadyLogged) {
+        // Update user tweet count only for new tweets
+        if (!userTweetCounts[author]) {
+          userTweetCounts[author] = 0;
+        }
+        userTweetCounts[author]++;
+
+        // Add to classification log
         classificationLog.push({
           id: tweetId,
           author: author,
@@ -96,8 +110,16 @@ async function classifyTweets() {
           },
           timestamp: new Date().toISOString()
         });
-        chrome.storage.local.set({ classificationLog: classificationLog });
+
+        // Save the updated userTweetCounts and classificationLog to chrome.storage.local
+        chrome.storage.local.set({ 
+          userTweetCounts: userTweetCounts,
+          classificationLog: classificationLog
+        });
       }
+
+      // Create or update badge (do this for all tweets, not just new ones)
+      updateBadge(author, authorElement);
 
       // Blur 'Spam' tweets
       if (classification === 'Spam') {
@@ -118,8 +140,46 @@ async function classifyTweets() {
       // Remove the classifying class whether classification succeeded or failed
       tweet.classList.remove('classifying');
     }
-  });
+  }
 }
+
+// New function to create or update badge
+function updateBadge(author, authorElement) {
+  const badgeId = `tweet-count-${author.replace(/\s+/g, '-')}`;
+  let badge = document.getElementById(badgeId);
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.id = badgeId;
+    badge.style.backgroundColor = '#1DA1F2';
+    badge.style.color = 'white';
+    badge.style.borderRadius = '9999px';
+    badge.style.padding = '2px 6px';
+    badge.style.fontSize = '12px';
+    badge.style.fontWeight = 'bold';
+    badge.style.marginLeft = '5px';
+    if (authorElement) {
+      authorElement.parentNode.insertBefore(badge, authorElement.nextSibling);
+    }
+  }
+  badge.textContent = userTweetCounts[author] || 0;
+}
+
+// Load existing classification log and user tweet counts
+chrome.storage.local.get(['classificationLog', 'userTweetCounts'], (result) => {
+  if (result.classificationLog) {
+    classificationLog = result.classificationLog;
+  }
+  if (result.userTweetCounts) {
+    userTweetCounts = result.userTweetCounts;
+    // Update badges for all authors in userTweetCounts
+    Object.keys(userTweetCounts).forEach(author => {
+      const authorElement = document.querySelector(`a[href="/${author}"]`);
+      if (authorElement) {
+        updateBadge(author, authorElement);
+      }
+    });
+  }
+});
 
 // Run classification when the page loads
 classifyTweets();
@@ -144,28 +204,45 @@ const debouncedClassifyTweets = debounce(classifyTweets, 500);
 const observer = new MutationObserver(debouncedClassifyTweets);
 observer.observe(document.body, { childList: true, subtree: true });
 
-// Load existing classification log
-chrome.storage.local.get('classificationLog', (result) => {
-  if (result.classificationLog) {
-    classificationLog = result.classificationLog;
+// Add this function to update badges when the log is cleared
+function clearUserTweetCounts() {
+  userTweetCounts = {};
+  chrome.storage.local.remove('userTweetCounts');
+  document.querySelectorAll('[id^="tweet-count-"]').forEach(badge => badge.remove());
+}
+
+// Modify the listener to handle potential disconnections
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (chrome.runtime.id) {
+    if (request.action === "toggleClassification") {
+      isEnabled = !isEnabled;
+      if (isEnabled) {
+        classifyTweets();
+      } else {
+        // Remove all classification badges when disabled
+        document.querySelectorAll('.tweet-classification').forEach(el => el.remove());
+        document.querySelectorAll('.classified').forEach(el => {
+          el.classList.remove('classified');
+          el.style.filter = 'none';
+          el.style.transition = 'none';
+        });
+        document.querySelectorAll('.classifying').forEach(el => el.classList.remove('classifying'));
+      }
+    } else if (request.action === "clearLog") {
+      clearUserTweetCounts();
+    }
+  } else {
+    console.log("Extension context invalidated. Reloading page...");
+    location.reload();
   }
 });
 
-// Listen for messages from popup
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "toggleClassification") {
-    isEnabled = !isEnabled;
-    if (isEnabled) {
-      classifyTweets();
-    } else {
-      // Remove all classification badges when disabled
-      document.querySelectorAll('.tweet-classification').forEach(el => el.remove());
-      document.querySelectorAll('.classified').forEach(el => {
-        el.classList.remove('classified');
-        el.style.filter = 'none';
-        el.style.transition = 'none';
-      });
-      document.querySelectorAll('.classifying').forEach(el => el.classList.remove('classifying'));
-    }
+// Add an error listener to detect disconnections
+chrome.runtime.onMessageExternal.addListener(function(request, sender, sendResponse) {
+  if (chrome.runtime.id) {
+    // Extension is still valid, do nothing
+  } else {
+    console.log("Extension context invalidated. Reloading page...");
+    location.reload();
   }
 });
